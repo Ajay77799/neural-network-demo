@@ -1,26 +1,24 @@
-# neural-network-demo# Interactive Neural Network Learning Demo
+# Interactive Neural Network Learning Demo
 
-A browser-based playground that trains a small neural network live with **TensorFlow.js**. Pick a dataset, change the architecture, and watch the decision boundary and loss curve update as the model learns. No install or backend needed.
+A Streamlit implementation of an interactive neural-network learning demo.
+
+## Features
+- XOR, Circle, and Spiral datasets
+- 1–4 hidden layers
+- 1–16 neurons per hidden layer
+- ReLU, tanh, and sigmoid activations
+- Adjustable learning rate
+- Train and Step controls
+- Decision-boundary visualization
+- Loss and accuracy tracking
 
 ## Run locally
+
 ```bash
-python3 -m http.server 8000   # then open http://localhost:8000
+pip install -r requirements.txt
+streamlit run app.py
 ```
-(or just double-click `index.html`)
 
-## Controls
-- **Dataset**: XOR, Circle, Spiral
-- **Hidden layers / neurons**: model depth and width
-- **Activation**: relu, tanh, sigmoid
-- **Learning rate**: Adam optimizer step size
-- **Train / Pause / Step / Reset**
+## Deploy
 
-## Project layout
-- `index.html` – the demo (HTML + CSS + JS + TensorFlow.js via CDN)
-- `docs/presentation.pptx` – slide deck
-
-## Publish on GitHub Pages
-Repo → Settings → Pages → Deploy from branch → `main` / root.
-
-## License
-MIT
+The app can be deployed from this GitHub repository using Streamlit Community Cloud.
