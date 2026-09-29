@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive Neural Network Learning Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<style>
+:root{--bg:#fff;--fg:#1f2937;--mut:#6b7280;--card:#f3f4f6;--acc:#2563eb}
+@media (prefers-color-scheme:dark){:root{--bg:#111827;--fg:#f3f4f6;--mut:#9ca3af;--card:#1f2937;--acc:#60a5fa}}
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+main{max-width:900px;margin:auto}
+h1{font-size:1.5rem;margin:0 0 4px}p.sub{color:var(--mut);margin:0 0 16px}
+.wrap{display:flex;flex-wrap:wrap;gap:16px}
+.panel{background:var(--card);border-radius:10px;padding:14px}
+.ctrl{flex:1 1 240px;display:flex;flex-direction:column;gap:10px}
+label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.9rem}
+select,input[type=range]{width:55%}
+button{padding:8px 12px;border:0;border-radius:6px;background:var(--acc);color:#fff;font-size:.9rem;cursor:pointer}
+button.alt{background:var(--mut)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.viz{flex:2 1 400px}
+canvas{max-width:100%;border-radius:6px;background:var(--bg)}
+.stats{font-variant-numeric:tabular-nums;margin:8px 0;font-size:.9rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Interactive Neural Network Learning Demo</h1>
+<p class="sub">Train a small network in your browser with TensorFlow.js and watch it learn.</p>
+<div class="wrap">
+ <div class="panel ctrl">
+  <label>Dataset
+   <select id="data"><option value="xor">XOR</option><option value="circle">Circle</option><option value="spiral">Spiral</option></select></label>
+  <label>Hidden layers <b id="Lv">2</b><input id="layers" type="range" min="1" max="4" value="2"></label>
+  <label>Neurons / layer <b id="Nv">8</b><input id="neurons" type="range" min="1" max="16" value="8"></label>
+  <label>Activation
+   <select id="act"><option>relu</option><option>tanh</option><option>sigmoid</option></select></label>
+  <label>Learning rate
+   <select id="lr"><option>0.001</option><option>0.01</option><option selected>0.03</option><option>0.1</option><option>0.5</option></select></label>
+  <div class="row">
+   <button id="go">Train</button><button id="step" class="alt">Step</button><button id="reset" class="alt">Reset</button>
+  </div>
+ </div>
+ <div class="panel viz">
+  <canvas id="map" width="400" height="400"></canvas>
+  <div class="stats">Epoch: <b id="ep">0</b> &nbsp; Loss: <b id="loss">-</b> &nbsp; Accuracy: <b id="acc">-</b></div>
+  <canvas id="chart" width="400" height="100"></canvas>
+ </div>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const map=$('map').getContext('2d'), chart=$('chart').getContext('2d');
+let model,X,Y,pts=[],losses=[],epoch=0,running=false,busy=false;
+
+function makeData(kind,n=200){
+  pts=[];
+  for(let i=0;i<n;i++){
+    let x,y,l;
+    if(kind==='spiral'){
+      l=i%2;const t=Math.random()*3+.3,a=t*1.5+l*Math.PI,r=t/3.4;
+      x=r*Math.cos(a)+(Math.random()-.5)*.08;y=r*Math.sin(a)+(Math.random()-.5)*.08;
+    }else{
+      x=Math.random()*2-1;y=Math.random()*2-1;
+      l=kind==='xor'?(x*y>0?1:0):(x*x+y*y<.45?1:0);
+    }
+    pts.push({x,y,l});
+  }
+  if(X){X.dispose();Y.dispose();}
+  X=tf.tensor2d(pts.map(p=>[p.x,p.y]));
+  Y=tf.tensor2d(pts.map(p=>[p.l]));
+}
+
+function build(){
+  if(model)model.dispose();
+  model=tf.sequential();
+  const L=+$('layers').value,N=+$('neurons').value,act=$('act').value;
+  for(let i=0;i<L;i++)model.add(tf.layers.dense({units:N,activation:act,...(i===0?{inputShape:[2]}:{})}));
+  model.add(tf.layers.dense({units:1,activation:'sigmoid'}));
+  model.compile({optimizer:tf.train.adam(+$('lr').value),loss:'binaryCrossentropy'});
+}
+
+function reset(){
+  running=false;$('go').textContent='Train';
+  makeData($('data').value);build();
+  epoch=0;losses=[];$('loss').textContent='-';$('acc').textContent='-';$('ep').textContent=0;
+  draw();
+}
+
+async function step(){
+  if(busy)return;busy=true;
+  const h=await model.fit(X,Y,{epochs:1,batchSize:32,shuffle:true,verbose:0});
+  epoch++;losses.push(h.history.loss[0]);
+  $('ep').textContent=epoch;$('loss').textContent=h.history.loss[0].toFixed(4);
+  draw();busy=false;
+}
+
+async function loop(){while(running){await step();await tf.nextFrame();}}
+
+function draw(){
+  const G=40,W=400,c=W/G,grid=[];
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++)grid.push([(i+.5)/G*2-1,1-(j+.5)/G*2]);
+  const [p,pr]=tf.tidy(()=>[model.predict(tf.tensor2d(grid)).dataSync(),model.predict(X).dataSync()]);
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){
+    const v=p[j*G+i];
+    map.fillStyle=`rgba(${Math.round(37+v*(249-37))},${Math.round(99+v*(115-99))},${Math.round(235+v*(22-235))},.55)`;
+    map.fillRect(i*c,j*c,c+1,c+1);
+  }
+  let ok=0;
+  pts.forEach((q,k)=>{
+    if((pr[k]>.5?1:0)===q.l)ok++;
+    map.beginPath();map.arc((q.x+1)/2*W,(1-q.y)/2*W,4,0,7);
+    map.fillStyle=q.l?'#f97316':'#2563eb';map.fill();map.strokeStyle='#fff';map.lineWidth=1.2;map.stroke();
+  });
+  if(epoch)$('acc').textContent=(ok/pts.length*100).toFixed(1)+'%';
+  drawChart();
+}
+
+function drawChart(){
+  const w=400,h=100;chart.clearRect(0,0,w,h);
+  chart.strokeStyle='#9ca3af';chart.strokeRect(0.5,0.5,w-1,h-1);
+  chart.fillStyle='#9ca3af';chart.font='11px sans-serif';chart.fillText('loss',6,14);
+  if(losses.length<2)return;
+  const mx=Math.max(...losses),n=losses.length;
+  chart.beginPath();
+  losses.forEach((l,i)=>{const x=i/(n-1)*(w-10)+5,y=h-5-(l/mx)*(h-20);i?chart.lineTo(x,y):chart.moveTo(x,y);});
+  chart.strokeStyle='#2563eb';chart.lineWidth=2;chart.stroke();
+}
+
+$('go').onclick=()=>{running=!running;$('go').textContent=running?'Pause':'Train';if(running)loop();};
+$('step').onclick=()=>{running=false;$('go').textContent='Train';step();};
+$('reset').onclick=reset;
+['data','layers','neurons','act','lr'].forEach(id=>$(id).onchange=reset);
+$('layers').oninput=e=>$('Lv').textContent=e.target.value;
+$('neurons').oninput=e=>$('Nv').textContent=e.target.value;
+reset();
+</script>
+</body>
+</html>
